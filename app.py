@@ -11,21 +11,19 @@ app.config['UPLOAD_FOLDER'] = 'uploads/'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max upload size
 
 # Create the 'uploads' folder if it doesn't exist
-# This is crucial for deployment on platforms like Railway
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
 # --- Core Audio Fingerprinting Logic (Your Function) ---
-def fingerprint_song(file_path, song_id):
+def fingerprint_song(file_path):
     """
     Generates a landmark-based fingerprint for a single audio file.
     
     Args:
         file_path (str): Path to the audio file.
-        song_id (str): A unique identifier for the song.
         
     Returns:
-        dict: A dictionary of {hash: [(song_id, timestamp), ...]}
+        dict: A dictionary of {hash: timestamp}
     """
     try:
         y, sr = librosa.load(file_path)
@@ -42,7 +40,6 @@ def fingerprint_song(file_path, song_id):
         peaks = np.where((detected_peaks) & (S_db > amplitude_threshold))
         
         if not peaks[0].any():
-            # No peaks found, return an empty fingerprint
             return {}
 
         # 3. Structure Peaks
@@ -73,8 +70,7 @@ def fingerprint_song(file_path, song_id):
                 if t_min <= target_time <= t_max and f_min <= target_freq <= f_max:
                     time_delta = target_time - anchor_time
                     h = hash((anchor_freq, target_freq, time_delta))
-                    entry = (song_id, anchor_time)
-                    song_fingerprint.setdefault(h, []).append(entry)
+                    song_fingerprint[h] = anchor_time
                     
         return song_fingerprint
 
@@ -90,10 +86,7 @@ def generate_fingerprint_endpoint():
         return jsonify({"error": "No file part in the request"}), 400
     
     file = request.files['file']
-    song_id = request.form.get('song_id')
 
-    if not song_id:
-        return jsonify({"error": "No song_id provided"}), 400
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
@@ -102,13 +95,12 @@ def generate_fingerprint_endpoint():
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(file_path)
 
-        fingerprint_data = fingerprint_song(file_path, song_id)
+        fingerprint_data = fingerprint_song(file_path)
         
         os.remove(file_path)
 
         if not fingerprint_data:
             return jsonify({
-                "song_id": song_id,
                 "message": "Could not generate fingerprint. The audio might be silent or too short.",
                 "fingerprint": {}
             }), 200
