@@ -10,8 +10,12 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads/'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max upload size
 
-# --- Core Audio Fingerprinting Logic (Your Function) ---
+# Create the 'uploads' folder if it doesn't exist
+# This is crucial for deployment on platforms like Railway
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
 
+# --- Core Audio Fingerprinting Logic (Your Function) ---
 def fingerprint_song(file_path, song_id):
     """
     Generates a landmark-based fingerprint for a single audio file.
@@ -78,13 +82,10 @@ def fingerprint_song(file_path, song_id):
         print(f"Could not process {file_path}. Error: {e}")
         return {}
 
-
 # --- API Endpoint ---
-
 @app.route('/fingerprint', methods=['POST'])
 def generate_fingerprint_endpoint():
     """API endpoint to receive a song and return its fingerprint."""
-    # 1. Check for file and song_id in the request
     if 'file' not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
     
@@ -96,19 +97,15 @@ def generate_fingerprint_endpoint():
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
-    # 2. Save the file temporarily
     if file:
         filename = secure_filename(file.filename)
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(file_path)
 
-        # 3. Generate the fingerprint using your function
         fingerprint_data = fingerprint_song(file_path, song_id)
         
-        # 4. Clean up the saved file
         os.remove(file_path)
 
-        # 5. Return the result
         if not fingerprint_data:
             return jsonify({
                 "song_id": song_id,
@@ -116,12 +113,8 @@ def generate_fingerprint_endpoint():
                 "fingerprint": {}
             }), 200
 
-        # jsonify will convert the dict (with int keys) to a valid JSON response
         return jsonify(fingerprint_data)
 
 # --- Main Execution ---
 if __name__ == '__main__':
-    # Create the 'uploads' folder if it doesn't exist
-    if not os.path.exists(app.config['UPLOAD_FOLDER']):
-        os.makedirs(app.config['UPLOAD_FOLDER'])
     app.run(debug=True, port=5000)
