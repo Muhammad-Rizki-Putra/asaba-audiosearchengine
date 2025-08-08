@@ -2,3 +2,4 @@ Flask
 numpy
 librosa
 scipy
+gunicorn
